@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCopy } from '@fortawesome/free-solid-svg-icons';
-import { Box, Button, Typography } from '@mui/material';
+import { Box, Button, Paper, Typography, useTheme } from '@mui/material';
 import { useCopyToClipboard } from 'react-use';
 import { saveAs } from 'file-saver';
 import { useEffect, useState } from 'react';
@@ -11,6 +11,9 @@ const RenderSecret = ({ secret }: { readonly secret: string }) => {
   const { t } = useTranslation();
   const [copy, copyToClipboard] = useCopyToClipboard();
   const [showQr, setShowQr] = useState(false);
+  const { palette } = useTheme();
+  // Do not display QR code if the secret is too long
+  const displayQR = secret.length < 500;
 
   return (
     <div>
@@ -19,30 +22,33 @@ const RenderSecret = ({ secret }: { readonly secret: string }) => {
       <Button
         color={copy.error ? 'secondary' : 'primary'}
         onClick={() => copyToClipboard(secret)}
+        startIcon={<FontAwesomeIcon icon={faCopy} size="xs" />}
       >
-        <FontAwesomeIcon icon={faCopy} /> {t('secret.buttonCopy')}
+        {t('secret.buttonCopy')}
       </Button>
-      <Typography
-        id="pre"
-        data-test-id="preformatted-text-secret"
-        sx={{
-          backgroundColor: '#ecf0f1',
-          padding: '15px',
-          border: '1px solid #cccccc',
-          display: 'block',
-          fontSize: '1rem',
-          borderRadius: '4px',
-          wordWrap: 'break-word',
-          wordBreak: 'break-all',
-          whiteSpace: 'pre-wrap',
-          fontFamily: 'monospace, monospace', // https://github.com/necolas/normalize.css/issues/519#issuecomment-197131966
-        }}
-      >
-        {secret}
-      </Typography>
-      <Button onClick={() => setShowQr(!showQr)}>
-        {showQr ? t('secret.hideQrCode') : t('secret.showQrCode')}
-      </Button>
+      <Paper variant="outlined">
+        <Typography
+          id="pre"
+          data-test-id="preformatted-text-secret"
+          sx={{
+            padding: '15px',
+            display: 'block',
+            fontSize: '1rem',
+            borderRadius: '4px',
+            wordWrap: 'break-word',
+            wordBreak: 'break-all',
+            whiteSpace: 'pre-wrap',
+            fontFamily: 'monospace, monospace', // https://github.com/necolas/normalize.css/issues/519#issuecomment-197131966
+          }}
+        >
+          {secret}
+        </Typography>
+      </Paper>
+      {displayQR && (
+        <Button onClick={() => setShowQr(!showQr)}>
+          {showQr ? t('secret.hideQrCode') : t('secret.showQrCode')}
+        </Button>
+      )}
       <Box
         sx={{
           display: showQr ? 'flex' : 'none',
@@ -51,7 +57,15 @@ const RenderSecret = ({ secret }: { readonly secret: string }) => {
           margin: 5,
         }}
       >
-        <QRCode size={150} style={{ height: 'auto' }} value={secret} />
+        {displayQR && (
+          <QRCode
+            bgColor={palette.background.default}
+            fgColor={palette.text.primary}
+            size={150}
+            style={{ height: 'auto' }}
+            value={secret}
+          />
+        )}
       </Box>
     </div>
   );
