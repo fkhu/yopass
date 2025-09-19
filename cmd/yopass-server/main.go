@@ -40,6 +40,12 @@ func init() {
 	pflag.Bool("force-onetime-secrets", false, "reject non onetime secrets from being created")
 	pflag.String("cors-allow-origin", "*", "Access-Control-Allow-Origin")
 	pflag.Bool("disable-upload", false, "disable the /file upload endpoints")
+	pflag.Bool("prefetch-secret", true, "Display information that the secret might be one time use")
+	pflag.Bool("disable-features", false, "disable features")
+	pflag.Bool("no-language-switcher", false, "disable the language switcher in the UI")
+	pflag.StringSlice("trusted-proxies", []string{}, "trusted proxy IP addresses or CIDR blocks for X-Forwarded-For header validation")
+	pflag.String("privacy-notice-url", "", "URL to privacy notice page")
+	pflag.String("imprint-url", "", "URL to imprint/legal notice page")
 	pflag.CommandLine.AddGoFlag(&flag.Flag{Name: "log-level", Usage: "Log level", Value: &logLevel})
 
 	viper.AutomaticEnv()
@@ -68,6 +74,7 @@ func main() {
 		ForceOneTimeSecrets: viper.GetBool("force-onetime-secrets"),
 		AssetPath:           viper.GetString("asset-path"),
 		Logger:              logger,
+		TrustedProxies:      viper.GetStringSlice("trusted-proxies"),
 	}
 	yopassSrv := &http.Server{
 		Addr:      fmt.Sprintf("%s:%d", viper.GetString("address"), viper.GetInt("port")),

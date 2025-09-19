@@ -25,6 +25,7 @@ type Server struct {
 	ForceOneTimeSecrets bool
 	AssetPath           string
 	Logger              *zap.Logger
+	TrustedProxies      []string
 }
 
 // createSecret creates secret
@@ -106,6 +107,26 @@ func (y *Server) getSecret(w http.ResponseWriter, request *http.Request) {
 	}
 }
 
+// getSecretStatus returns minimal status for a secret without returning the secret content
+func (y *Server) getSecretStatus(w http.ResponseWriter, request *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", viper.GetString("cors-allow-origin"))
+	w.Header().Set("Cache-Control", "private, no-cache")
+	w.Header().Set("Content-Type", "application/json")
+
+	secretKey := mux.Vars(request)["key"]
+	oneTime, err := y.DB.Status(secretKey)
+	if err != nil {
+		y.Logger.Debug("Secret not found", zap.Error(err), zap.String("key", secretKey))
+		http.Error(w, `{"message": "Secret not found"}`, http.StatusNotFound)
+		return
+	}
+
+	resp := map[string]bool{"oneTime": oneTime}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		y.Logger.Error("Failed to write status response", zap.Error(err), zap.String("key", secretKey))
+	}
+}
+
 // deleteSecret from database
 func (y *Server) deleteSecret(w http.ResponseWriter, request *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", viper.GetString("cors-allow-origin"))
@@ -136,8 +157,20 @@ func (y *Server) configHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "content-type")
 	w.Header().Set("Content-Type", "application/json")
 
-	config := map[string]bool{
-		"DISABLE_UPLOAD": viper.GetBool("disable-upload"),
+	config := map[string]interface{}{
+		"DISABLE_UPLOAD":        viper.GetBool("disable-upload"),
+		"PREFETCH_SECRET":       viper.GetBool("prefetch-secret"),
+		"DISABLE_FEATURES":      viper.GetBool("disable-features"),
+		"NO_LANGUAGE_SWITCHER":  viper.GetBool("no-language-switcher"),
+		"FORCE_ONETIME_SECRETS": viper.GetBool("force-onetime-secrets"),
+	}
+
+	// Add optional string URLs only if they are provided
+	if privacyURL := viper.GetString("privacy-notice-url"); privacyURL != "" {
+		config["PRIVACY_NOTICE_URL"] = privacyURL
+	}
+	if imprintURL := viper.GetString("imprint-url"); imprintURL != "" {
+		config["IMPRINT_URL"] = imprintURL
 	}
 
 	json.NewEncoder(w).Encode(config)
@@ -150,21 +183,27 @@ func (y *Server) HTTPHandler() http.Handler {
 
 	mx.HandleFunc("/secret", y.createSecret).Methods(http.MethodPost)
 	mx.HandleFunc("/secret", y.optionsSecret).Methods(http.MethodOptions)
+	if viper.GetBool("prefetch-secret") {
+		mx.HandleFunc("/secret/"+keyParameter+"/status", y.getSecretStatus).Methods(http.MethodGet)
+	}
 	mx.HandleFunc("/secret/"+keyParameter, y.getSecret).Methods(http.MethodGet)
 	mx.HandleFunc("/secret/"+keyParameter, y.deleteSecret).Methods(http.MethodDelete)
 
 	mx.HandleFunc("/config", y.configHandler).Methods(http.MethodGet)
 	mx.HandleFunc("/config", y.optionsSecret).Methods(http.MethodOptions)
 
-	if !viper.GetBool("DISABLE_UPLOAD") {
+	if !viper.GetBool("disable-upload") {
 		mx.HandleFunc("/file", y.createSecret).Methods(http.MethodPost)
 		mx.HandleFunc("/file", y.optionsSecret).Methods(http.MethodOptions)
+		if viper.GetBool("prefetch-secret") {
+			mx.HandleFunc("/file/"+keyParameter+"/status", y.getSecretStatus).Methods(http.MethodGet)
+		}
 		mx.HandleFunc("/file/"+keyParameter, y.getSecret).Methods(http.MethodGet)
 		mx.HandleFunc("/file/"+keyParameter, y.deleteSecret).Methods(http.MethodDelete)
 	}
 
 	mx.PathPrefix("/").Handler(http.FileServer(http.Dir(y.AssetPath)))
-	return handlers.CustomLoggingHandler(nil, SecurityHeadersHandler(mx), httpLogFormatter(y.Logger))
+	return handlers.CustomLoggingHandler(nil, SecurityHeadersHandler(mx), y.httpLogFormatter())
 }
 
 const keyParameter = "{key:(?:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})}"
@@ -188,6 +227,7 @@ func SecurityHeadersHandler(next http.Handler) http.Handler {
 		"font-src 'self' data:",
 		"form-action 'self'",
 		"frame-ancestors 'none'",
+		"img-src 'self' data:",
 		"script-src 'self'",
 		"style-src 'self' 'unsafe-inline'",
 	}
