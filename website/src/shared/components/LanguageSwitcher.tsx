@@ -10,13 +10,16 @@ export default function LanguageSwitcher() {
     { code: 'de', name: 'Deutsch' },
     { code: 'ru', name: 'Русский' },
     { code: 'by', name: 'Беларускі' },
+    { code: 'fr', name: 'Français' },
+    { code: 'nl', name: 'Nederlands' },
+    { code: 'es', name: 'Español' },
   ];
 
-  const handleLanguageChange = (languageCode: string) => {
+  function handleLanguageChange(languageCode: string) {
     i18n.changeLanguage(languageCode);
     // Only store language preference when user explicitly selects it
     localStorage.setItem('i18nextLng', languageCode);
-  };
+  }
 
   return (
     <div className="dropdown dropdown-end">
